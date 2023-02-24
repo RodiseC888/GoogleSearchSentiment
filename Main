@@ -1,0 +1,94 @@
+#import Module
+from GoogleNews import GoogleNews
+from googlesearch import search
+import requests
+from bs4 import BeautifulSoup
+import urllib
+import pandas as pd
+import numpy as np 
+
+#Simply Scrape price in yahoo finance(For Testing)
+Ticker = "TSLA"
+URL = "https://finance.yahoo.com/quote/" + Ticker + "?p=" + Ticker + "&.tsrc=fin-srch"
+page = requests.get(URL)
+
+soup = BeautifulSoup(page.content, "html.parser")
+
+Track = soup.find("fin-streamer", attrs={"class":"Fw(b) Fz(36px) Mb(-4px) D(ib)"})
+print(Track.text)
+
+#Scrape Google Search for sentiment of news
+Search = "TSLA"
+Type = "nws"
+NoPages = 50
+NoPageList= np.linspace(0, NoPages, int(NoPages/10)+1)
+
+News_Class = pd.DataFrame(columns=["Title", "URL", "Status"])
+
+for Page in NoPageList:
+    print("Scrape Page", int(Page/10)+1)
+    URL = "https://www.google.com/search?q=" + Search + "&tbm=" + Type + "&start=" + str(int(Page)) + "&hl=en"
+    page = requests.get(URL)
+    soup = BeautifulSoup(page.content, "html.parser")
+
+    TrackURL = [link["href"] for link in soup.find_all("a", href=True) if "/url?q=" in link['href'] and "google.com" not in link['href']]
+
+    TrackTitle1 = soup.find_all("span", {"class" :"rQMQod Xb5VRe"})
+    TrackTitle2 = soup.find_all("div", {"class" :"BNeawe vvjwJb AP7Wnd"})
+    TrackTitle = TrackTitle1 + TrackTitle2
+
+    #print(TrackTitle[3].text)
+    #print(TrackURL[1])
+
+    x = 0
+
+    for URL in TrackURL:
+        e = 0
+        Link = urllib.request.Request(URL[7::])
+        Link.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36')
+        
+        try:
+            response = urllib.request.urlopen(Link, timeout=10)  
+        except:
+            x += 1
+            e += 1
+        
+        if e == 1 :
+            continue
+
+        site=response.read()
+            
+        Pos = ["win", "success", "occupy", "bullish", "dominate", "dominated", "gain", "grow", "increase", "rise", "strong", "jump", "jumped", "best", "high", "higher", "surprise", "good", "top", 
+        "more", "huge", "untouchable", "king", "head", "expand", "ahead", "secured", "secure"]
+        Neg = ["lose", "fail", "bearish", "lost", "decrease", "decline", "dethrone", "weak", "drop", "droped", "worst", "plunge", "low", "lower", "worry", "worried", "bad", "shrink", "shrinked",
+        "behind", "mess"]
+
+        PosCount = 0
+        NegCount = 0
+        PosNews = 0
+        NegNews = 0
+        NeuNews = 0
+        for word in Pos:
+            if bytes(word, 'utf-8') in site:
+                PosCount+=1
+
+        for word in Neg:
+            if bytes(word, 'utf-8') in site:
+                NegCount+=1
+
+        if PosCount > NegCount+3:
+            News_Class.loc[len(News_Class)] = (TrackTitle[x].text, TrackURL[x], 1)
+        elif NegCount > PosCount+3:
+            News_Class.loc[len(News_Class)] = (TrackTitle[x].text, TrackURL[x], -1)
+        else:
+            News_Class.loc[len(News_Class)] = (TrackTitle[x].text, TrackURL[x], 0)
+
+        x += 1
+        
+#Dataset (Title, URL, Status)
+News_Class
+
+#Summary on Status
+print(News_Class.groupby("Status").count())
+
+
